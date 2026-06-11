@@ -1,0 +1,59 @@
+name: 'Busbar GitHub Workflow Parser'
+description: 'Parses a GitHub Actions workflow into a Component Integrity Matrix and transmits it to Salesforce using OIDC zero-trust Token Exchange'
+author: 'busbar.agency'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  target-instance:
+    description: 'Instance URL of the Busbar-equipped target org (e.g. https://acme.my.salesforce.com). The binary OIDC-exchanges against this org in-process. REQUIRED for the default OIDC path.'
+    required: false
+    default: ''
+
+  workflow:
+    description: 'Path to the GitHub Actions workflow YAML file.'
+    required: false
+    default: '.github/workflows/deploy.yml'
+
+  sha:
+    description: 'Git Commit SHA of the executing workflow context.'
+    required: false
+    default: ${{ github.sha }}
+
+  rest-endpoint:
+    description: 'REST API Endpoint to POST the manifest to on Salesforce.'
+    required: false
+    default: '/services/apexrest/GitHubWorkflowSync'
+
+outputs:
+  workflow-hash:
+    description: 'The computed SHA-256 hash of the workflow file.'
+    value: ${{ steps.parse.outputs.workflow-hash }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install the gh-workflow-parser binary from actions-dist
+      uses: busbar-actions/setup@main
+      with:
+        binary: gh-workflow-parser
+        version: ${{ env.BUSBAR_ACTION_VERSION || 'latest' }}
+        binary-repo: ${{ env.BUSBAR_ACTION_REPO || 'busbar-actions/actions-dist' }}
+
+    # NO org-auth handoff step and NO "Register org session" step: the binary
+    # self-mints. It exchanges the runner's GitHub OIDC id-token for a short-lived
+    # Salesforce token IN-PROCESS, holds it only in zeroizing memory, and revokes it
+    # at exit. No token is ever written to GITHUB_ENV or passed between steps.
+    - name: Parse and transmit workflow integrity payload
+      id: parse
+      shell: bash
+      env:
+        SF_INSTANCE_URL: ${{ inputs.target-instance || env.SF_INSTANCE_URL }}
+        INPUT_WORKFLOW: ${{ inputs.workflow }}
+        INPUT_SHA: ${{ inputs.sha }}
+        INPUT_REST_ENDPOINT: ${{ inputs.rest-endpoint }}
+      run: |
+        set -euo pipefail
+        echo "Transmitting workflow '${INPUT_WORKFLOW}' to ${SF_INSTANCE_URL}${INPUT_REST_ENDPOINT}"
+        gh-workflow-parser
