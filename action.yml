@@ -22,14 +22,32 @@ inputs:
     default: ${{ github.sha }}
 
   rest-endpoint:
-    description: 'REST API Endpoint to POST the manifest to on Salesforce.'
+    description: 'REST API Endpoint to POST the manifest to on Salesforce (used only if target-instance is set).'
     required: false
     default: '/services/apexrest/GitHubWorkflowSync'
+
+  output-path:
+    description: 'Path to write the JSON integrity matrix.'
+    required: false
+    default: '${{ runner.temp }}/workflow-reports/integrity.json'
+
+  upload-artifact:
+    description: 'Upload the JSON report as a workflow artifact.'
+    required: false
+    default: 'true'
+
+  artifact-name:
+    description: 'Artifact name when upload-artifact=true.'
+    required: false
+    default: 'workflow-integrity-report'
 
 outputs:
   workflow-hash:
     description: 'The computed SHA-256 hash of the workflow file.'
     value: ${{ steps.parse.outputs.workflow-hash }}
+  report-path:
+    description: 'Path to the generated JSON report.'
+    value: ${{ steps.parse.outputs.report-path }}
 
 runs:
   using: 'composite'
@@ -41,19 +59,29 @@ runs:
         version: ${{ env.BUSBAR_ACTION_VERSION || 'latest' }}
         binary-repo: ${{ env.BUSBAR_ACTION_REPO || 'busbar-actions/actions-dist' }}
 
-    # NO org-auth handoff step and NO "Register org session" step: the binary
-    # self-mints. It exchanges the runner's GitHub OIDC id-token for a short-lived
-    # Salesforce token IN-PROCESS, holds it only in zeroizing memory, and revokes it
-    # at exit. No token is ever written to GITHUB_ENV or passed between steps.
-    - name: Parse and transmit workflow integrity payload
+    - name: Parse workflow integrity
       id: parse
       shell: bash
       env:
         SF_INSTANCE_URL: ${{ inputs.target-instance || env.SF_INSTANCE_URL }}
+        INPUT_TARGET_INSTANCE: ${{ inputs.target-instance }}
         INPUT_WORKFLOW: ${{ inputs.workflow }}
         INPUT_SHA: ${{ inputs.sha }}
         INPUT_REST_ENDPOINT: ${{ inputs.rest-endpoint }}
+        INPUT_OUTPUT_PATH: ${{ inputs.output-path }}
       run: |
         set -euo pipefail
-        echo "Transmitting workflow '${INPUT_WORKFLOW}' to ${SF_INSTANCE_URL}${INPUT_REST_ENDPOINT}"
+        if [ -n "${INPUT_TARGET_INSTANCE}" ]; then
+          echo "Transmitting workflow '${INPUT_WORKFLOW}' to ${SF_INSTANCE_URL}${INPUT_REST_ENDPOINT}"
+        else
+          echo "Parsing workflow '${INPUT_WORKFLOW}' and saving report to ${INPUT_OUTPUT_PATH} (Sync to Salesforce skipped)"
+        fi
         gh-workflow-parser
+
+    - name: Upload the JSON report as a workflow artifact
+      if: always() && inputs.upload-artifact == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.output-path }}
+        if-no-files-found: error
