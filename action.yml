@@ -12,9 +12,9 @@ inputs:
     default: ''
 
   workflow:
-    description: 'Path to the GitHub Actions workflow YAML file.'
+    description: 'Path to the GitHub Actions workflow YAML file. Optional in scanner mode: if omitted, every workflow under .github/workflows/ is analyzed.'
     required: false
-    default: '.github/workflows/deploy.yml'
+    default: ''
 
   sha:
     description: 'Git Commit SHA of the executing workflow context.'
