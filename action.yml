@@ -22,9 +22,9 @@ inputs:
     default: ${{ github.sha }}
 
   rest-endpoint:
-    description: 'REST API Endpoint to POST the manifest to on Salesforce (used only if target-instance is set).'
+    description: 'REST API Endpoint to POST the manifest to on Salesforce (used only if target-instance is set). Defaults to the managed-install path (busbar namespace). For a non-namespaced source-deploy/dev org, set this to /services/apexrest/GitHubWorkflowSync.'
     required: false
-    default: '/services/apexrest/GitHubWorkflowSync'
+    default: '/services/apexrest/busbar/GitHubWorkflowSync'
 
   output-path:
     description: 'Path to write the JSON integrity matrix.'
@@ -40,6 +40,31 @@ inputs:
     description: 'Artifact name when upload-artifact=true.'
     required: false
     default: 'workflow-integrity-report'
+
+  report:
+    description: 'Scanner mode: run the security rule pack and emit a findings report instead of the integrity-sync flow.'
+    required: false
+    default: 'false'
+
+  format:
+    description: 'Report output format(s): json, sarif, or both.'
+    required: false
+    default: 'json'
+
+  sarif-out:
+    description: 'Path for the SARIF file.'
+    required: false
+    default: ''
+
+  report-out:
+    description: 'Path for the canonical JSON report.'
+    required: false
+    default: ''
+
+  fail-on:
+    description: 'Fail the action (exit 1) if any finding is at or above this severity (critical, high, medium, hygiene, none).'
+    required: false
+    default: 'none'
 
 outputs:
   workflow-hash:
@@ -69,6 +94,11 @@ runs:
         INPUT_SHA: ${{ inputs.sha }}
         INPUT_REST_ENDPOINT: ${{ inputs.rest-endpoint }}
         INPUT_OUTPUT_PATH: ${{ inputs.output-path }}
+        INPUT_REPORT: ${{ inputs.report }}
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_SARIF_OUT: ${{ inputs.sarif-out }}
+        INPUT_REPORT_OUT: ${{ inputs.report-out }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
       run: |
         set -euo pipefail
         if [ -n "${INPUT_TARGET_INSTANCE}" ]; then
